@@ -3,6 +3,9 @@ import re
 import sys
 
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from logger import logger
 
@@ -36,7 +39,7 @@ def get_env(
 ):
     """Get an environment variable. If `mandatory` is True and environment
     variable isn't set, exit the program"""
-    value = os.environ.get(key)
+    value = os.environ.get(key) if os.environ.get(key) else os.getenv(key)
     if mandatory and not value:
         logger.error(f"Environment variable {key} must be set.")
         sys.exit(1)

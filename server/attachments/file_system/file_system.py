@@ -19,7 +19,8 @@ class FileSystemAttachments(BaseAttachments):
             raise NotADirectoryError(
                 f"'{self.base_path}' is not a valid directory."
             )
-        self.storage_path = os.path.join(self.base_path, "attachments")
+        # TODO: custom attachments folder
+        self.storage_path = os.path.join(self.base_path, get_env("ATTACHMENT_FOLDER", mandatory=True))
         os.makedirs(self.storage_path, exist_ok=True)
 
     def create(self, file: UploadFile) -> AttachmentCreateResponse:

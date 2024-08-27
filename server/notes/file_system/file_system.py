@@ -56,7 +56,8 @@ class FileSystemNotes(BaseNotes):
 
     def create(self, data: NoteCreate) -> Note:
         """Create a new note."""
-        filepath = self._path_from_title(data.title)
+        filepath = os.path.join(self.storage_path,
+                                get_env("NEW_NOTE_FOLDER", mandatory=True), data.title + MARKDOWN_EXT)
         self._write_file(filepath, data.content)
         return Note(
             title=data.title,
@@ -162,7 +163,17 @@ class FileSystemNotes(BaseNotes):
         return os.path.join(self.storage_path, ".flatnotes")
 
     def _path_from_title(self, title: str) -> str:
-        return os.path.join(self.storage_path, title + MARKDOWN_EXT)
+        # TODO: Change here for scan subdir
+        filepath = os.path.join(
+            self.storage_path, title + MARKDOWN_EXT)
+        dirlist = glob.glob(os.path.join(
+            self.storage_path, "**/*" + MARKDOWN_EXT))
+        dirlist.extend(glob.glob(os.path.join(
+            self.storage_path, "*" + MARKDOWN_EXT)))
+        for file in dirlist:
+            if title in file:
+                filepath = file
+        return filepath
 
     def _get_by_filename(self, filename: str) -> Note:
         """Get a note by its filename."""
@@ -222,12 +233,21 @@ class FileSystemNotes(BaseNotes):
 
     def _list_all_note_filenames(self) -> List[str]:
         """Return a list of all note filenames."""
-        return [
-            os.path.split(filepath)[1]
-            for filepath in glob.glob(
-                os.path.join(self.storage_path, "*" + MARKDOWN_EXT)
-            )
-        ]
+        # TODO: Change here for scan subdir
+        notes = []
+        for filepath in glob.glob(os.path.join(self.storage_path, "**/*" + MARKDOWN_EXT)):
+            name = os.path.split(filepath)[1]
+            notes.append(name)
+        for filepath in glob.glob(os.path.join(self.storage_path, "*" + MARKDOWN_EXT)):
+            name = os.path.split(filepath)[1]
+            notes.append(name)
+        return notes
+        # return [
+        #     os.path.split(filepath)[1]
+        #     for filepath in glob.glob(
+        #         os.path.join(self.storage_path, "**" + MARKDOWN_EXT)
+        #     )
+        # ]
 
     def _sync_index(self, optimize: bool = False, clean: bool = False) -> None:
         """Synchronize the index with the notes directory.
@@ -239,7 +259,8 @@ class FileSystemNotes(BaseNotes):
         with self.index.searcher() as searcher:
             for idx_note in searcher.all_stored_fields():
                 idx_filename = idx_note["filename"]
-                idx_filepath = os.path.join(self.storage_path, idx_filename)
+                # TODO: Change here for scan subdir
+                idx_filepath = self._path_from_title(idx_filename)
                 # Delete missing
                 if not os.path.exists(idx_filepath):
                     writer.delete_by_term("filename", idx_filename)

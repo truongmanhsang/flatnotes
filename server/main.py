@@ -1,8 +1,10 @@
+import logging
 from typing import List, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from git import Repo
 
 import api_messages
 from attachments.base import BaseAttachments
@@ -10,9 +12,13 @@ from attachments.models import AttachmentCreateResponse
 from auth.base import BaseAuth
 from auth.models import Login, Token
 from global_config import AuthType, GlobalConfig, GlobalConfigResponseModel
-from helpers import replace_base_href
+from helpers import replace_base_href, get_env
 from notes.base import BaseNotes
 from notes.models import Note, NoteCreate, NoteUpdate, SearchResult
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+import time
 
 global_config = GlobalConfig()
 auth: BaseAuth = global_config.load_auth()
@@ -25,6 +31,24 @@ app = FastAPI(
     openapi_url=global_config.path_prefix + "/openapi.json",
 )
 replace_base_href("client/dist/index.html", global_config.path_prefix)
+
+
+def sync_git():
+    logging.debug(f"Task running at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    repo = Repo(get_env("FLATNOTES_PATH", mandatory=True))
+    repo.git.pull('origin', "main")
+    repo.git.add(update=True)
+    repo.index.commit(f"Update from flatnotes at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    origin = repo.remote(name='origin')
+    origin.push()
+
+
+# Scheduler setup
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+# Add the job to the scheduler
+scheduler.add_job(sync_git, trigger=IntervalTrigger(minutes=1))
 
 
 # region UI
@@ -99,6 +123,7 @@ if global_config.auth_type != AuthType.READ_ONLY:
                 status_code=409, detail=api_messages.note_exists
             )
 
+
     # Update Note
     @router.patch(
         "/api/notes/{title}",
@@ -119,6 +144,7 @@ if global_config.auth_type != AuthType.READ_ONLY:
             )
         except FileNotFoundError:
             raise HTTPException(404, api_messages.note_not_found)
+
 
     # Delete Note
     @router.delete(
@@ -148,10 +174,10 @@ if global_config.auth_type != AuthType.READ_ONLY:
     response_model=List[SearchResult],
 )
 def search(
-    term: str,
-    sort: Literal["score", "title", "lastModified"] = "score",
-    order: Literal["asc", "desc"] = "desc",
-    limit: int = None,
+        term: str,
+        sort: Literal["score", "title", "lastModified"] = "score",
+        order: Literal["asc", "desc"] = "desc",
+        limit: int = None,
 ):
     """Perform a full text search on all notes."""
     if sort == "lastModified":
